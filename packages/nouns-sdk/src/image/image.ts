@@ -10,7 +10,7 @@ export class Image {
   private _width: number;
   private _height: number;
   private _rows: ImageRows = {};
-  private _bounds: ImageBounds = { top: 0, bottom: 0, left: 0, right: 0 };
+  private _bounds: ImageBounds = { top: -1, bottom: 0, left: 0, right: 0 };
   private _rle: string | undefined;
 
   /**
@@ -142,12 +142,12 @@ export class Image {
   private updateImageBounds(y: number): void {
     const { rects } = this._rows[y];
 
-    // Shift top bound to `y` if row is not empty and top bound is 0
-    if (!this.isEmptyRow(rects[0]) && this._bounds.top === 0) {
+    // Shift top bound to `y` if row is not empty and top bound is not set (-1)
+    if (!this.isEmptyRow(rects[0]) && this._bounds.top === -1) {
       this._bounds.top = y;
     }
 
-    if (this._bounds.top !== 0) {
+    if (this._bounds.top !== -1) {
       // Set bottom bound to `y` if row is empty or we're on the last row.
       // Otherwise, reset the bottom bound
       if (this.isEmptyRow(rects[0])) {
@@ -161,9 +161,18 @@ export class Image {
       }
     }
 
+    const lastRect = rects[rects.length - 1];
+
+    // Use length if the first rect is transparent. otherwise use 0
+    const left = rects[0].colorIndex === 0 ? rects[0].length : 0;
+
     this._rows[y].bounds = {
-      left: rects[0].length,
-      right: this._width - rects[rects.length - 1].length,
+      left,
+      // Use length if the last rect is transparent, otherwise use the width
+      right: Math.max(
+        left,
+        lastRect.colorIndex === 0 ? this._width - 1 - lastRect.length : this._width - 1,
+      ),
     };
   }
 
@@ -205,7 +214,7 @@ export class Image {
       row.rects.flatMap(({ length, colorIndex }, i) => {
         // Row only contains a single rect
         if (i === 0 && i === row.rects.length - 1) {
-          return [bounds.right - bounds.left, colorIndex];
+          return [bounds.right - bounds.left + 1, colorIndex];
         }
 
         // Set left bound
@@ -219,9 +228,9 @@ export class Image {
 
         // Set right bound
         if (i === row.rects.length - 1) {
-          if (length > this._width - bounds.right) {
-            return [length - (this._width - bounds.right), colorIndex];
-          } else if (length === this._width - bounds.right) {
+          if (length > this._width - 1 - bounds.right) {
+            return [length - (this._width - bounds.right) + 1, colorIndex];
+          } else if (length === this._width - 1 - bounds.right) {
             return [];
           }
         }
